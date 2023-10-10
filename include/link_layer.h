@@ -3,7 +3,6 @@
 
 #ifndef _LINK_LAYER_H_
 #define _LINK_LAYER_H_
-
 typedef enum
 {
     LlTx,
@@ -44,11 +43,14 @@ typedef enum
 #define A_T 0x03
 #define A_R 0x01
 #define C_SET 0x03
-#define UA 0x07
+#define C_UA 0x07
 
 
 //Global variables
 volatile int STOP = FALSE;
+int alarmEnabled = FALSE;
+int alarmCount = 0;
+
 
 // Open a connection using the "port" parameters defined in struct linkLayer.
 // Return "1" on success or "-1" on error.
@@ -68,6 +70,9 @@ int llread(unsigned char *packet);
 int llclose(int showStatistics);
 
 //Receiver state machine to validate SET
-int receiver_state_machine(unsigned char byte,LinkLayerCurrentState current_state)
+int receiver_state_machine(unsigned char byte,LinkLayerCurrentState current_state);
+
+//Alarm handler
+void alarmHandler();
 
 #endif // _LINK_LAYER_H_
