@@ -3,6 +3,17 @@
 
 #ifndef _LINK_LAYER_H_
 #define _LINK_LAYER_H_
+
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <termios.h>
+#include <unistd.h>
+#include <signal.h>
+#include <time.h>
 typedef enum
 {
     LlTx,
@@ -39,7 +50,7 @@ typedef enum
 #define BUF_SIZE 5
 
 //Frame constants
-#define BAUDRATE 38400
+#define BAUDRATE B38400
 #define FLAG 0x7E
 #define A_T 0x03
 #define A_R 0x01
@@ -53,9 +64,8 @@ typedef enum
 
 
 //Global variables
-volatile int STOP = FALSE;
-int alarmEnabled = FALSE;
-int alarmCount = 0;
+//volatile int STOP_R = FALSE;
+
 
 
 // Open a connection using the "port" parameters defined in struct linkLayer.
@@ -77,6 +87,12 @@ int llclose(int showStatistics);
 
 //Receiver state machine to validate SET
 int receiver_state_machine(unsigned char byte,LinkLayerCurrentState current_state);
+
+//Transmiter state machine to validate UA
+int transmiter_state_machine(unsigned char byte,LinkLayerCurrentState current_state);
+
+//State machine to process answer's control frame
+int control_frame_state_machine(unsigned char byte,LinkLayerCurrentState current_state);
 
 //Alarm handler
 void alarmHandler();

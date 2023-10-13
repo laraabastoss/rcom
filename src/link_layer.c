@@ -8,22 +8,30 @@
 int frame_number = 0;
 int nRetransmissions = 0;
 int timeout = 0;
+int alarmEnabled = FALSE;
+int alarmCount = 0;
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
     // check connection
-    int fd = open(connectionParameters.serialPort,O_RDWR|O_NOCTTY);
+    int fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
     if (fd < 0){
 
-    perror(connectionParameters.serialPort);
-    exit(-1);
+        perror(connectionParameters.serialPort);
+        exit(-1);
+    }
+
+    printf("n erro\n");
+    
     nRetransmissions = connectionParameters.nRetransmissions;
     timeout = connectionParameters.timeout;
 
-    }
-    /*
+
+    struct termios oldtio;
+    struct termios newtio;
+    
     if (tcgetattr(fd, &oldtio) == -1)
     {
         perror("tcgetattr");
@@ -45,40 +53,32 @@ int llopen(LinkLayer connectionParameters)
         perror("tcsetattr");
         return -1;
     }
-    */
+    
+    printf("começar estados\n");
     
     LinkLayerCurrentState current_state = START;
     unsigned char byte;
 
+    printf("Start current_state\n");
+
     switch(connectionParameters.role){
-        case (LlRx):{
-            while (current_state !=STOP){
-                if (read(fd,&byte,1)>0){
-                    receiver_state_machine(byte,current_state);
-                }
-            
-            }
-            
-            //Send UA
-            unsigned char UA[BUF_SIZE] = {FLAG, A_R, C_UA, A_R ^ C_UA, FLAG};
-            int written_bytes = write(fd,UA,BUF_SIZE);
-            if (written_bytes < 0){
-                exit(-1);
-            }
-            else printf("%d bytes written\n",written_bytes);
-
-            break;
-
-        }
 
         case (LlTx):{
             
-            unsigned char SET[BUF_SIZE] = {FLAG, A_T, C_SET, A_T ^ C_SET, FLAG};
+            printf("Entrou transmiter\n");
+            
+            unsigned char SET[BUF_SIZE] = {FLAG, A_T, C_SET, (A_T ^ C_SET), FLAG};
             (void) signal(SIGALRM, alarmHandler);
             unsigned char byte;
 
             while(alarmCount < connectionParameters.nRetransmissions){
+                printf("entrou alarme\n");
                 int written_bytes = write(fd, SET, BUF_SIZE);
+                sleep(1);
+                printf("%d bytes written\n", written_bytes);
+                if (written_bytes < 0){
+                    exit(-1);
+                }
                 alarm(connectionParameters.timeout);
                 alarmEnabled = TRUE;
                 while (alarmEnabled == TRUE && current_state != STOP){
@@ -87,6 +87,30 @@ int llopen(LinkLayer connectionParameters)
 
                 }
             }
+
+            break;
+
+        }
+        
+        case (LlRx):{
+            printf("Entrou receiver\n");
+            
+            while (current_state !=STOP){
+                if (read(fd,&byte,1)>0){
+                    printf("%u bytes", byte);
+                    receiver_state_machine(byte,current_state);
+                }
+            
+            }
+            
+            //Send UA
+            unsigned char UA[BUF_SIZE] = {FLAG, A_R, C_UA, (A_R ^ C_UA), FLAG};
+            int written_bytes = write(fd,UA,BUF_SIZE);
+            sleep(1);
+            if (written_bytes < 0){
+                exit(-1);
+            }
+            else printf("%d bytes written\n",written_bytes);
 
             break;
 
@@ -107,7 +131,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
     information_frame[0] = FLAG;
     information_frame[1] = A_T;
     information_frame[2] = C(frame_number);
-    information_frame[3] = information_frame[1] ^ information_frame[2];
+    information_frame[3] = (information_frame[1] ^ information_frame[2]);
     memcpy(information_frame+4,buf, bufSize);
     unsigned char BCC2 = buf[0];
     for (unsigned int i = 1 ; i < bufSize ; i++){
@@ -122,7 +146,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
             information_frame = realloc(information_frame,++current_size);
             information_frame[current_index++] = ESC;
         }
-        information_frame[current_index++] = buf[i] ^ 0x20;
+        information_frame[current_index++] = (buf[i] ^ 0x20);
     }
 
     information_frame[current_index++] = BCC2;
@@ -135,6 +159,9 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
     while(alarmCount < nRetransmissions){
 
         int written_bytes = write(fd, information_frame, current_index);
+        if (written_bytes < 0){
+            exit(-1);
+        }
         (void) signal(SIGALRM, alarmHandler);
         alarm(timeout);
         alarmEnabled = TRUE;
@@ -203,6 +230,8 @@ int receiver_state_machine(unsigned char byte,LinkLayerCurrentState current_stat
     switch (current_state){
         case (START):{
 
+            printf("Start state");
+            
             if (byte == FLAG){
                 current_state = FLAG_RCV;                     
             }
@@ -244,7 +273,7 @@ int receiver_state_machine(unsigned char byte,LinkLayerCurrentState current_stat
 
         case (C_RCV):{
 
-            if (byte == A_T ^ C_SET){
+            if (byte == (A_T ^ C_SET)){
                 current_state = BCC_OK;
             }
             
@@ -272,8 +301,14 @@ int receiver_state_machine(unsigned char byte,LinkLayerCurrentState current_stat
             break;
 
         }
+
+        case (STOP):{
+            break;
+        }
     
     }
+
+    return 0;
 }
 
 int transmiter_state_machine(unsigned char byte,LinkLayerCurrentState current_state){
@@ -321,7 +356,7 @@ int transmiter_state_machine(unsigned char byte,LinkLayerCurrentState current_st
 
         case (C_RCV):{
 
-            if (byte == A_R ^ C_UA){
+            if (byte == (A_R ^ C_UA)){
                 current_state = BCC_OK;
             }
             
@@ -349,8 +384,14 @@ int transmiter_state_machine(unsigned char byte,LinkLayerCurrentState current_st
             break;
 
         }
+
+        case (STOP):{
+            break;
+        }
     
     }
+
+    return 0;
 }
 
 int control_frame_state_machine(unsigned char byte, LinkLayerCurrentState current_state){
@@ -401,7 +442,7 @@ int control_frame_state_machine(unsigned char byte, LinkLayerCurrentState curren
 
         case (C_RCV):{
 
-            if (byte == A_R ^ answer){
+            if (byte == (A_R ^ answer)){
                 current_state = BCC_OK;
             }
             
@@ -428,6 +469,10 @@ int control_frame_state_machine(unsigned char byte, LinkLayerCurrentState curren
 
             break;
 
+        }
+
+        case (STOP):{
+            break;
         }
     
     }
