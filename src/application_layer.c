@@ -6,14 +6,21 @@
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
-    LinkLayer ll;
-    ll.nRetransmissions = nTries;
-    ll.timeout = timeout;
-    ll.role = strcmp(role, "tx") ? LlRx : LlTx;
-    ll.baudRate = baudRate;
-    strcpy(ll.serialPort, serialPort);
+    LinkLayer linkLayer;
+    strcpy(linkLayer.serialPort,serialPort);
+    linkLayer.role = strcmp(role, "tx") ? LlRx : LlTx;
+    linkLayer.baudRate = baudRate;
+    linkLayer.nRetransmissions = nTries;
+    linkLayer.timeout = timeout;
 
     printf("ll created \n");
-    
-    llopen(ll);
+
+    unsigned char i = 1;
+    int fd = llopen(linkLayer);
+    printf("%i",fd);
+    if (linkLayer.role == LlTx){
+        printf("entrou");
+        llwrite(fd,&i,1);
+    }   
+
 }

@@ -31,13 +31,14 @@ typedef struct
 
 typedef enum
 {
-  START,
-  FLAG_RCV,
-  A_RCV,
-  C_RCV,
-  BCC_OK,
-  STOP,
-}LinkLayerCurrentState;
+   START,
+   FLAG_RCV,
+   A_RCV,
+   C_RCV,
+   BCC_OK,
+   STOP_R,
+} LinkLayerStateMachine;
+
 
 // SIZE of maximum acceptable payload.
 // Maximum number of bytes that application layer should send to link layer
@@ -48,18 +49,19 @@ typedef enum
 #define TRUE 1
 
 #define BUF_SIZE 5
+#define BAUDRATE 38400
 
 //Frame constants
-#define BAUDRATE B38400
 #define FLAG 0x7E
-#define A_T 0x03
-#define A_R 0x01
+#define ESC 0x7D
+#define A_ER 0x03
+#define A_RE 0x01
 #define C_SET 0x03
+#define C_DISC 0x0B
 #define C_UA 0x07
-#define ESC 0x7d
-#define C(N) (N << 6)
-#define C_RR(N) ((N << 7) | 0x05)
-#define C_REJ(N) ((N <<7) | 0x01)
+#define C_RR(Nr) ((Nr << 7) | 0x05)
+#define C_REJ(Nr) ((Nr << 7) | 0x01)
+#define C_N(Ns) (Ns << 6)
 
 
 
@@ -86,15 +88,18 @@ int llread(unsigned char *packet);
 int llclose(int showStatistics);
 
 //Receiver state machine to validate SET
-int receiver_state_machine(unsigned char byte,LinkLayerCurrentState current_state);
+void receiver_state_machine(int fd, LinkLayerStateMachine current_state);
 
 //Transmiter state machine to validate UA
-int transmiter_state_machine(unsigned char byte,LinkLayerCurrentState current_state);
+LinkLayerStateMachine transmiter_state_machine(int fd,LinkLayerStateMachine current_state);
 
 //State machine to process answer's control frame
-int control_frame_state_machine(unsigned char byte,LinkLayerCurrentState current_state);
+int control_frame_state_machine(int fd, unsigned char byte,LinkLayerStateMachine current_state);
 
 //Alarm handler
 void alarmHandler();
+
+int set_serial_port(LinkLayer connectionParameters);
+
 
 #endif // _LINK_LAYER_H_
