@@ -39,11 +39,17 @@ typedef enum
 #define BUF_SIZE 5
 
 //Frame constants
+#define BAUDRATE 38400
 #define FLAG 0x7E
 #define A_T 0x03
 #define A_R 0x01
 #define C_SET 0x03
 #define C_UA 0x07
+#define ESC 0x7d
+#define C(N) (N << 6)
+#define C_RR(N) ((N << 7) | 0x05)
+#define C_REJ(N) ((N <<7) | 0x01)
+
 
 
 //Global variables
@@ -58,7 +64,7 @@ int llopen(LinkLayer connectionParameters);
 
 // Send data in buf with size bufSize.
 // Return number of chars written, or "-1" on error.
-int llwrite(const unsigned char *buf, int bufSize);
+int llwrite(int fd, const unsigned char *buf, int bufSize);
 
 // Receive data in packet.
 // Return number of chars read, or "-1" on error.

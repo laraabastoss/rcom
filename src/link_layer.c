@@ -5,7 +5,9 @@
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
-
+int frame_number = 0;
+int nRetransmissions = 0;
+int timeout = 0;
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
@@ -17,9 +19,34 @@ int llopen(LinkLayer connectionParameters)
 
     perror(connectionParameters.serialPort);
     exit(-1);
+    nRetransmissions = connectionParameters.nRetransmissions;
+    timeout = connectionParameters.timeout;
 
     }
+    /*
+    if (tcgetattr(fd, &oldtio) == -1)
+    {
+        perror("tcgetattr");
+        exit(-1);
+    }
+    
+    memset(&newtio, 0, sizeof(newtio));
 
+    newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+    newtio.c_iflag = IGNPAR;
+    newtio.c_oflag = 0;
+    newtio.c_lflag = 0;
+    newtio.c_cc[VTIME] = 0;
+    newtio.c_cc[VMIN] = 0;
+
+    tcflush(fd, TCIOFLUSH);
+
+    if (tcsetattr(fd, TCSANOW, &newtio) == -1) {
+        perror("tcsetattr");
+        return -1;
+    }
+    */
+    
     LinkLayerCurrentState current_state = START;
     unsigned char byte;
 
@@ -74,11 +101,73 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 // LLWRITE
 ////////////////////////////////////////////////
-int llwrite(const unsigned char *buf, int bufSize)
+int llwrite(int fd, const unsigned char *buf, int bufSize)
 {
-    // TODO
+    unsigned char *information_frame = (unsigned char *) malloc(bufSize + 6);
+    information_frame[0] = FLAG;
+    information_frame[1] = A_T;
+    information_frame[2] = C(frame_number);
+    information_frame[3] = information_frame[1] ^ information_frame[2];
+    memcpy(information_frame+4,buf, bufSize);
+    unsigned char BCC2 = buf[0];
+    for (unsigned int i = 1 ; i < bufSize ; i++){
+        BCC2 ^= buf[i];
+    }
+    int current_size = bufSize + 6;
+    int current_index = 4;
 
-    return 0;
+    // stuffing
+    for (unsigned int i = 0 ; i<bufSize ; i++){
+        if (buf[i] == FLAG || buf[i] == ESC){
+            information_frame = realloc(information_frame,++current_size);
+            information_frame[current_index++] = ESC;
+        }
+        information_frame[current_index++] = buf[i] ^ 0x20;
+    }
+
+    information_frame[current_index++] = BCC2;
+    information_frame[current_index++] = FLAG;
+    alarmCount = 0;
+    int accepted = 0;
+    int rejected = 0;
+    unsigned char byte;
+    LinkLayerCurrentState current_state = START;
+    while(alarmCount < nRetransmissions){
+
+        int written_bytes = write(fd, information_frame, current_index);
+        (void) signal(SIGALRM, alarmHandler);
+        alarm(timeout);
+        alarmEnabled = TRUE;
+        accepted = 0; 
+        rejected =0;
+        
+        while (alarmEnabled == TRUE && accepted == 0 && rejected ==0 && current_state!=STOP){
+            int bytes = read(fd, &byte, 1);
+            if (bytes > 0){
+                unsigned char answer = control_frame_state_machine(byte,current_state);
+
+                if (answer == C_RR(0) || answer == C_RR(1)){
+                    accepted = 1;
+                    frame_number += 1;
+                    frame_number %= 2;
+                }
+
+                else if (answer == C_REJ(0) || answer == C_REJ(1)){
+                    rejected = 1;
+                }
+
+            }
+
+        }
+     if (accepted) break;
+    }
+
+    free(information_frame);
+    if (accepted) return current_index;
+    else {
+        llclose(fd);
+        return -1;
+    }
 }
 
 ////////////////////////////////////////////////
@@ -262,4 +351,85 @@ int transmiter_state_machine(unsigned char byte,LinkLayerCurrentState current_st
         }
     
     }
+}
+
+int control_frame_state_machine(unsigned char byte, LinkLayerCurrentState current_state){
+    unsigned char answer = 0;
+     switch (current_state){
+        case (START):{
+
+            if (byte == FLAG){
+                current_state = FLAG_RCV;                     
+            }
+
+            break;
+
+        }
+        case (FLAG_RCV):{
+
+            if (byte == A_R){
+                current_state = A_RCV;
+            }
+
+            else if (byte != FLAG){
+                current_state = START;
+            }
+
+            break;
+
+        }
+
+        case (A_RCV):{
+
+            if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) ){
+                current_state = C_RCV;
+                answer = byte;
+
+            }
+
+            else if (byte == FLAG){
+                current_state = FLAG_RCV;
+            }
+            
+            else{
+                current_state = START;
+            }
+
+            break;
+
+        }
+
+        case (C_RCV):{
+
+            if (byte == A_R ^ answer){
+                current_state = BCC_OK;
+            }
+            
+            else if (byte == FLAG){
+                current_state = FLAG_RCV;
+            }
+            
+            else{
+                current_state = START;
+            }
+
+            break;
+        }
+
+        case (BCC_OK):{
+
+            if (byte == FLAG){
+                current_state = STOP;
+            }
+
+            else{
+                current_state = START;
+            }
+
+            break;
+
+        }
+    
+    }
+    return answer;
 }
