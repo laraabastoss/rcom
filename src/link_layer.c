@@ -150,6 +150,7 @@ int llread(unsigned char *packet)
 {
     // TODO
 
+
     return 0;
 }
 
@@ -158,9 +159,91 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 int llclose(int showStatistics)
 {
-    // TODO
 
-    return 1;
+    LinkLayerStateMachine current_state;
+    unsigned char byte;
+    alarmEnabled = TRUE;
+    alarmCount = 0;
+
+    while (alarmCount < retransmitions && current_state!=STOP){
+
+        unsigned char DISC[5] = {FLAG, A_ER, C_DISC, A_ER ^ C_DISC, FLAG};
+        write(showStatistics, DISC, 5);
+        alarm(timeout);
+        alarmEnabled = TRUE;
+        while (alarmEnabled == TRUE && current_state!=STOP_R){
+
+            if (read(showStatistics, &byte,1) > 0){
+                 
+                    switch (current_state) {
+
+                        case START:
+
+                            if (byte == FLAG){
+                                current_state = FLAG_RCV;
+                            }
+
+                            break;
+                        case FLAG_RCV:
+
+                            if (byte == A_ER){
+                                current_state = A_RCV;
+                            }
+
+                            else if (byte != FLAG) current_state = START;
+
+                            break;
+
+                        case A_RCV:
+
+                            if (byte == C_DISC){
+                                current_state = C_RCV;
+                            }
+
+                            else if (byte == FLAG){
+                                current_state = FLAG_RCV;
+                            }
+
+                            else current_state = START;
+
+                            break;
+
+                        case C_RCV:
+
+                            if (byte == (A_ER ^ C_DISC)){
+                                current_state = BCC_OK;
+                            }
+
+                            else if (byte == FLAG){
+                                current_state = FLAG_RCV;
+                            }
+
+                            else current_state = START;
+
+                            break;
+                        case BCC_OK:
+
+                            if (byte == FLAG){
+                                current_state = STOP_R;
+                            }
+
+                            else current_state = START;
+
+                            break;
+
+                        default: 
+
+                            break;
+                    }   
+            }
+        }
+    }
+
+    if (current_state != STOP_R) return -1;
+    unsigned char UA[5] = {FLAG, A_ER, C_UA, A_ER ^ C_UA, FLAG};
+    write(showStatistics, UA, 5);
+
+    return close(showStatistics);
 }
 
 
