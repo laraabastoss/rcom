@@ -11,7 +11,6 @@ int timeout = 0;
 int retransmitions = 0;
 unsigned char tramaTx = 0;
 unsigned char tramaRx = 1;
-int frame_number = 0;
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
@@ -68,7 +67,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
     information_frame[0] = FLAG;
     
     information_frame[1] = A_ER;
-    information_frame[2] = C_N(frame_number);
+    information_frame[2] = C_N(tramaTx);
     information_frame[3] = (information_frame[1] ^ information_frame[2]);
     memcpy(information_frame+4,buf, bufSize);
     unsigned char BCC2 = buf[0];
@@ -119,8 +118,8 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
 
                 if (answer == C_RR(0) || answer == C_RR(1)){
                     accepted = 1;
-                    frame_number += 1;
-                    frame_number %= 2;
+                    tramaTx += 1;
+                    tramaTx %= 2;
                 }
 
                 else if (answer == C_REJ(0) || answer == C_REJ(1)){
@@ -146,12 +145,99 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
-int llread(unsigned char *packet)
+int llread(int fd, unsigned char *packet)
 {
-    // TODO
 
+    unsigned char byte, control_field;
+    LinkLayerStateMachine current_state = START;
+    int current_index = 0;
+    
+    while (current_state != STOP_R){
+        if (read(fd, &byte, 1) > 0){
+            switch (current_state) {
+                case START:
+                    
+                    if (byte == FLAG) current_state = A_RCV;
+                    break;
+                
+                case FLAG_RCV:
 
-    return 0;
+                    if (byte == A_ER) current_state = A_RCV;
+                    else if (byte != FLAG) current_state = START;
+                    break;
+
+                case A_RCV:
+
+                    if (byte == C_N(0) || byte == C_N(1)){
+
+                        current_state = C_RCV;
+                        control_field = byte;
+
+                    }
+                    else if (byte == FLAG) current_state = FLAG_RCV;
+                    else if (byte == C_DISC){
+
+                        unsigned char DISC[5] = {FLAG, A_RE, C_DISC, A_RE ^ C_DISC, FLAG};
+                        write(fd, DISC, 5);
+                        return 0;
+
+                    }
+                    else current_state = START;
+                    break;
+                
+                case C_RCV:
+                    if (byte == (A_ER ^ control_field)) current_state = READING;
+                    else if (byte == FLAG) current_state = FLAG_RCV;
+                    else current_state = START;
+                    break;
+                
+                case READING:
+                    if (byte == ESC) current_state = FOUND_STUFFING;
+                    else if (byte == FLAG){
+                        unsigned char bcc2 = packet[current_index-1];
+                        current_index--;
+                        packet[current_index] = '\0';
+                        unsigned char bcc2_test = packet[0];
+
+                        for (unsigned int i = 1; i < current_index; i++){
+
+                            bcc2_test ^= packet[i];
+
+                        }
+
+                        if (bcc2 == bcc2_test){
+
+                            current_state = STOP_R;
+                            unsigned char ACCEPTED[5] = {FLAG, A_RE, C_RR(tramaRx), A_RE ^ C_RR(tramaRx), FLAG};
+                            write(fd, ACCEPTED, 5);
+                            tramaRx = (tramaRx + 1)%2;
+                            return current_index;
+                        }
+
+                        else{
+
+                            unsigned char REJECTED[5] = {FLAG, A_RE, C_REJ(tramaRx), A_RE ^ C_REJ(tramaRx), FLAG};
+                            write(fd, REJECTED, 5);
+                            return -1;
+
+                        }
+                    }
+                    else{
+                        packet[current_index++] = byte;
+                    }
+                    break;
+                case FOUND_STUFFING:
+                    current_state = READING;
+                    if (byte == (ESC^0x20) || byte == (FLAG^0x20)) packet[current_index++] = (byte^0x20);
+                    break;
+                default:
+                    break;
+
+            }
+        }
+    }
+
+    return -1;
 }
 
 ////////////////////////////////////////////////
@@ -415,93 +501,91 @@ int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachin
 
     unsigned char answer = 0;
     LinkLayerStateMachine current_state = START;
-while (current_state != STOP_R && alarmEnabled == TRUE) {  
-    if (read(fd, &byte, 1) > 0 || 1) {
-     switch (current_state){
-        case (START):{
+    while (current_state != STOP_R && alarmEnabled == TRUE) {  
+        if (read(fd, &byte, 1) > 0 || 1) {
+            switch (current_state){
+            case (START):{
 
-            if (byte == FLAG){
-                current_state = FLAG_RCV;                     
+                if (byte == FLAG){
+                    current_state = FLAG_RCV;                     
+                }
+
+                break;
+
             }
+            case (FLAG_RCV):{
 
-            break;
+                if (byte == A_RE){
+                    current_state = A_RCV;
+                }
 
-        }
-        case (FLAG_RCV):{
+                else if (byte != FLAG){
+                    current_state = START;
+                }
 
-            if (byte == A_RE){
-                current_state = A_RCV;
-            }
-
-            else if (byte != FLAG){
-                current_state = START;
-            }
-
-            break;
-
-        }
-
-        case (A_RCV):{
-
-            if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) ){
-                current_state = C_RCV;
-                answer = byte;
+                break;
 
             }
 
-            else if (byte == FLAG){
-                current_state = FLAG_RCV;
-            }
+            case (A_RCV):{
+
+                if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) ){
+                    current_state = C_RCV;
+                    answer = byte;
+
+                }
+
+                else if (byte == FLAG){
+                    current_state = FLAG_RCV;
+                }
             
-            else{
-                current_state = START;
+                else{
+                    current_state = START;
+                }
+
+                break;
+
             }
 
-            break;
+            case (C_RCV):{
 
-        }
-
-        case (C_RCV):{
-
-            if (byte == (A_RE ^ answer)){
-                current_state = BCC_OK;
-            }
+                if (byte == (A_RE ^ answer)){
+                    current_state = BCC_OK;
+                }
             
-            else if (byte == FLAG){
-                current_state = FLAG_RCV;
-            }
+                else if (byte == FLAG){
+                    current_state = FLAG_RCV;
+                }
             
-            else{
-                current_state = START;
+                else{
+                    current_state = START;
+                }
+
+                break;
             }
 
-            break;
-        }
+            case (BCC_OK):{
 
-        case (BCC_OK):{
+                if (byte == FLAG){
+                    current_state = STOP;
+                }
 
-            if (byte == FLAG){
-                current_state = STOP;
+                else{
+                    current_state = START;
+                }
+
+                break;
+
             }
 
-            else{
-                current_state = START;
+            default:
+
+                break;
+
             }
-
-            break;
-
         }
-
-        case (STOP_R):{
-            break;
-        }
-    
-    
-
     }
-    }
-}
-return answer;
+    return answer;
      
 }
 

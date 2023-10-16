@@ -15,13 +15,18 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     printf("ll created \n");
 
-    //unsigned char i = 1;
+    unsigned char *packet;
+    
+    unsigned char i = 0x111;
     int fd = llopen(linkLayer);
     printf("%i",fd);
-    if (linkLayer.role == LlRx){
+    if (linkLayer.role == LlTx){
         printf("entrou");
-       // llwrite(fd,&i,1);
-       llclose(fd);
-    }   
+        llwrite(fd,&i,1);
+    }  
+
+    if (linkLayer.role == LlRx){
+        llread(fd, packet)
+    } 
 
 }
