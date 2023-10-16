@@ -24,13 +24,10 @@ int llopen(LinkLayer connectionParameters)
     switch (connectionParameters.role) {
 
         case LlTx: {
-            printf("1");
             (void) signal(SIGALRM, alarmHandler);
 
             state = transmiter_state_machine(fd,state);
-            printf("1.1");
             if (state != STOP_R){
-                printf("bahh");
                 return -1;
             }
 
@@ -38,12 +35,9 @@ int llopen(LinkLayer connectionParameters)
         }
 
         case LlRx: {
-            printf("2");
             receiver_state_machine(fd,state);
-            printf("2.1");
             unsigned char UA[5] = {FLAG, A_RE, C_UA, A_RE ^ C_UA, FLAG};
             write(fd, UA, 5);
-            printf("2.2");
             break; 
         }
 
@@ -51,7 +45,7 @@ int llopen(LinkLayer connectionParameters)
             return -1;
             break;
     }
-            
+    
     return fd;
 }
 
@@ -82,8 +76,12 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
         if (buf[i] == FLAG || buf[i] == ESC){
             information_frame = realloc(information_frame,++current_size);
             information_frame[current_index++] = ESC;
+            information_frame[current_index++] = (buf[i] ^ 0x20);
         }
-        information_frame[current_index++] = (buf[i] ^ 0x20);
+        else{
+            information_frame[current_index++] = buf[i];
+        }
+        
     }
 
     information_frame[current_index++] = BCC2;
@@ -96,30 +94,31 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
     //(void) signal(SIGALRM, alarmHandler);
 
     while(alarmCount < retransmitions){
-        printf("new");
         alarmEnabled = TRUE;
+        alarm(0);
         alarm(timeout);
+        printf("alarm write\n");
         accepted = 0; 
-        rejected =0;
-
-        
-        
+        rejected = 0;
         
         while (alarmEnabled == TRUE && accepted == 0 && rejected ==0 ){
+            
+
             int written_bytes = write(fd, information_frame, current_index);
 
             if (written_bytes < 0){
                 exit(-1);
             }
          
-         
-           
                 unsigned char answer = control_frame_state_machine(fd, byte,current_state);
 
+                printf("outside answer: %d\n", answer);
+                
                 if (answer == C_RR(0) || answer == C_RR(1)){
                     accepted = 1;
                     tramaTx += 1;
                     tramaTx %= 2;
+                    alarmCount = retransmitions;
                 }
 
                 else if (answer == C_REJ(0) || answer == C_REJ(1)){
@@ -136,6 +135,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
     if (accepted) return current_index;
     else {
         llclose(fd);
+        printf("not accepted\n");
         return -1;
     }
     
@@ -186,6 +186,7 @@ int llread(int fd, unsigned char *packet)
                     break;
                 
                 case C_RCV:
+                    
                     if (byte == (A_ER ^ control_field)) current_state = READING;
                     else if (byte == FLAG) current_state = FLAG_RCV;
                     else current_state = START;
@@ -194,6 +195,7 @@ int llread(int fd, unsigned char *packet)
                 case READING:
                     if (byte == ESC) current_state = FOUND_STUFFING;
                     else if (byte == FLAG){
+                        
                         unsigned char bcc2 = packet[current_index-1];
                         current_index--;
                         packet[current_index] = '\0';
@@ -255,7 +257,9 @@ int llclose(int showStatistics)
 
         unsigned char DISC[5] = {FLAG, A_ER, C_DISC, A_ER ^ C_DISC, FLAG};
         write(showStatistics, DISC, 5);
+        alarm(0);
         alarm(timeout);
+        printf("alarm close\n");
         alarmEnabled = TRUE;
         while (alarmEnabled == TRUE && current_state!=STOP_R){
 
@@ -337,7 +341,7 @@ int llclose(int showStatistics)
 void alarmHandler(int signal) {
     alarmEnabled = FALSE;
     alarmCount++;
-    printf("count++ \n");
+    printf("\n count++ \n");
 }
 
 // receiver state machine to validate SET
@@ -421,7 +425,9 @@ LinkLayerStateMachine transmiter_state_machine(int fd,LinkLayerStateMachine curr
 
                 unsigned char SET[5] = {FLAG, A_ER, C_SET, A_ER ^ C_SET, FLAG};
                 write(fd, SET, 5);
+                alarm(0);
                 alarm(timeout);
+                printf("alarm open\n");
                 alarmEnabled = TRUE;
                 
                 while (alarmEnabled == TRUE && current_state != STOP_R) {
@@ -499,9 +505,10 @@ LinkLayerStateMachine transmiter_state_machine(int fd,LinkLayerStateMachine curr
 
 int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachine state){
 
-    unsigned char answer = 0;
+    int answer = 0;
     LinkLayerStateMachine current_state = START;
     while (current_state != STOP_R && alarmEnabled == TRUE) {  
+        
         if (read(fd, &byte, 1) > 0 || 1) {
             switch (current_state){
             case (START):{
@@ -532,6 +539,7 @@ int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachin
                 if (byte == C_RR(0) || byte == C_RR(1) || byte == C_REJ(0) || byte == C_REJ(1) ){
                     current_state = C_RCV;
                     answer = byte;
+                    printf("answer: %d\n", answer);
 
                 }
 
@@ -585,6 +593,7 @@ int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachin
             }
         }
     }
+    printf("final answer: %d\n", answer);
     return answer;
      
 }

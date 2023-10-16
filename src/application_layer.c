@@ -13,20 +13,23 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     linkLayer.nRetransmissions = nTries;
     linkLayer.timeout = timeout;
 
-    printf("ll created \n");
-
-    unsigned char *packet;
+    unsigned char *packet_received = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
     
-    unsigned char i = 0x111;
+    unsigned char* packet = (unsigned char *)malloc(4);
+
+    packet[0] = 1;
+    packet[1] = 0;
+    packet[2] = 1 & 0xFF;
+    //memcpy(packet+4, 0x01, 1);
+
+    unsigned char i = 12;
     int fd = llopen(linkLayer);
-    printf("%i",fd);
     if (linkLayer.role == LlTx){
-        printf("entrou");
         llwrite(fd,&i,1);
     }  
 
     if (linkLayer.role == LlRx){
-        llread(fd, packet)
+        llread(fd, packet_received);
     } 
 
 }
