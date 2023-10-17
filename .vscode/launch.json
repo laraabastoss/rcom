@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "c:/dev/liamm/Documentos/Faculdade/3ano_1semestre/RCOM/rcom",
-      "program": "c:/dev/liamm/Documentos/Faculdade/3ano_1semestre/RCOM/rcom/build/Debug/outDebug",
+      "cwd": "c:/Users/liamm/Documentos/Faculdade/3ano_1semestre/RCOM/rcom",
+      "program": "c:/Users/liamm/Documentos/Faculdade/3ano_1semestre/RCOM/rcom/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [

@@ -16,6 +16,7 @@ unsigned char tramaRx = 1;
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
+    (void) signal(SIGALRM, alarmHandler);
     // check connection
     int fd = set_serial_port(connectionParameters);
 
@@ -24,11 +25,14 @@ int llopen(LinkLayer connectionParameters)
     switch (connectionParameters.role) {
 
         case LlTx: {
-            (void) signal(SIGALRM, alarmHandler);
+   
 
             state = transmiter_state_machine(fd,state);
             if (state != STOP_R){
                 return -1;
+            }
+            else{
+                alarm(0);
             }
 
             break;  
@@ -94,23 +98,24 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
     //(void) signal(SIGALRM, alarmHandler);
 
     while(alarmCount < retransmitions){
+        printf("1");
         alarmEnabled = TRUE;
-        alarm(0);
         alarm(timeout);
         printf("alarm write\n");
         accepted = 0; 
         rejected = 0;
         
         while (alarmEnabled == TRUE && accepted == 0 && rejected ==0 ){
+                 printf("2");
             
-
             int written_bytes = write(fd, information_frame, current_index);
+            
 
             if (written_bytes < 0){
                 exit(-1);
             }
          
-                unsigned char answer = control_frame_state_machine(fd, byte,current_state);
+            unsigned char answer = control_frame_state_machine(fd, byte,current_state);
 
                 printf("outside answer: %d\n", answer);
                 
@@ -119,6 +124,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
                     tramaTx += 1;
                     tramaTx %= 2;
                     alarmCount = retransmitions;
+                    alarm(0);
                 }
 
                 else if (answer == C_REJ(0) || answer == C_REJ(1)){
@@ -154,10 +160,11 @@ int llread(int fd, unsigned char *packet)
     
     while (current_state != STOP_R){
         if (read(fd, &byte, 1) > 0){
+            printf("byte: %u\n",byte);
             switch (current_state) {
                 case START:
                     
-                    if (byte == FLAG) current_state = A_RCV;
+                    if (byte == FLAG) current_state = FLAG_RCV;
                     break;
                 
                 case FLAG_RCV:
@@ -176,7 +183,6 @@ int llread(int fd, unsigned char *packet)
                     }
                     else if (byte == FLAG) current_state = FLAG_RCV;
                     else if (byte == C_DISC){
-
                         unsigned char DISC[5] = {FLAG, A_RE, C_DISC, A_RE ^ C_DISC, FLAG};
                         write(fd, DISC, 5);
                         return 0;
@@ -187,7 +193,9 @@ int llread(int fd, unsigned char *packet)
                 
                 case C_RCV:
                     
-                    if (byte == (A_ER ^ control_field)) current_state = READING;
+                    if (byte == (A_ER ^ control_field)){
+                        current_state = READING;
+                    }
                     else if (byte == FLAG) current_state = FLAG_RCV;
                     else current_state = START;
                     break;
@@ -195,6 +203,7 @@ int llread(int fd, unsigned char *packet)
                 case READING:
                     if (byte == ESC) current_state = FOUND_STUFFING;
                     else if (byte == FLAG){
+
                         
                         unsigned char bcc2 = packet[current_index-1];
                         current_index--;
@@ -208,12 +217,13 @@ int llread(int fd, unsigned char *packet)
                         }
 
                         if (bcc2 == bcc2_test){
-
                             current_state = STOP_R;
                             unsigned char ACCEPTED[5] = {FLAG, A_RE, C_RR(tramaRx), A_RE ^ C_RR(tramaRx), FLAG};
                             write(fd, ACCEPTED, 5);
                             tramaRx = (tramaRx + 1)%2;
+
                             return current_index;
+                            
                         }
 
                         else{
@@ -253,11 +263,11 @@ int llclose(int showStatistics)
     alarmEnabled = TRUE;
     alarmCount = 0;
 
-    while (alarmCount < retransmitions && current_state!=STOP){
+    while (alarmCount < retransmitions && current_state!=STOP_R){
 
         unsigned char DISC[5] = {FLAG, A_ER, C_DISC, A_ER ^ C_DISC, FLAG};
         write(showStatistics, DISC, 5);
-        alarm(0);
+    
         alarm(timeout);
         printf("alarm close\n");
         alarmEnabled = TRUE;
@@ -315,6 +325,7 @@ int llclose(int showStatistics)
 
                             if (byte == FLAG){
                                 current_state = STOP_R;
+                                alarm(0);
                             }
 
                             else current_state = START;
@@ -403,6 +414,7 @@ void receiver_state_machine(int fd, LinkLayerStateMachine current_state){
 
                             if (byte == FLAG){
                                 current_state = STOP_R;
+                                alarm(0);
                             }
 
                             else current_state = START;
@@ -425,10 +437,10 @@ LinkLayerStateMachine transmiter_state_machine(int fd,LinkLayerStateMachine curr
 
                 unsigned char SET[5] = {FLAG, A_ER, C_SET, A_ER ^ C_SET, FLAG};
                 write(fd, SET, 5);
-                alarm(0);
-                alarm(timeout);
+                
                 printf("alarm open\n");
                 alarmEnabled = TRUE;
+                alarm(timeout);
                 
                 while (alarmEnabled == TRUE && current_state != STOP_R) {
 
@@ -487,6 +499,7 @@ LinkLayerStateMachine transmiter_state_machine(int fd,LinkLayerStateMachine curr
                                 if (byte == FLAG){
                                 
                                     current_state = STOP_R;
+                                    alarm(0);
                                 }
 
                                 else current_state = START;
@@ -507,9 +520,11 @@ int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachin
 
     int answer = 0;
     LinkLayerStateMachine current_state = START;
-    while (current_state != STOP_R && alarmEnabled == TRUE) {  
+    while (current_state != STOP_R && alarmEnabled == TRUE) { 
         
-        if (read(fd, &byte, 1) > 0 || 1) {
+        if (read(fd, &byte, 1) > 0 ) {
+
+            printf("aaa");
             switch (current_state){
             case (START):{
 
@@ -575,7 +590,10 @@ int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachin
             case (BCC_OK):{
 
                 if (byte == FLAG){
-                    current_state = STOP;
+                    current_state = STOP_R;
+                    alarm(0);
+                   
+
                 }
 
                 else{
@@ -592,6 +610,7 @@ int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachin
 
             }
         }
+
     }
     printf("final answer: %d\n", answer);
     return answer;
