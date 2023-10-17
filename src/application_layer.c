@@ -63,9 +63,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     exit(-1);
                 }*/
 
-                 /* for (int i=0;i<packetSize;i++){
+                  for (int i=0;i<packetSize;i++){
                     printf("%i--",packet[i]);
-                }*/
+                }
                 printf("\n");
                 
                 bytesLeft -= (long int) MAX_PAYLOAD_SIZE; 
