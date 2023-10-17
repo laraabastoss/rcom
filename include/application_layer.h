@@ -23,4 +23,6 @@ unsigned char * getDataPacket(unsigned char sequence, unsigned char *data, int d
 
 unsigned char * getData(FILE* fd, long int fileLength);
 
+void parseDataPacket(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer);
+
 #endif // _APPLICATION_LAYER_H_

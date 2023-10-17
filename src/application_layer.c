@@ -52,23 +52,23 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 printf("a:");
                 printf("%i \n",bytesLeft);
 
-                int dataSize = bytesLeft > (long int) MAX_PAYLOAD_SIZE ? MAX_PAYLOAD_SIZE : bytesLeft;
+                int dataSize = bytesLeft > (long int) MAX_PAYLOAD_SIZE - 4 ? MAX_PAYLOAD_SIZE - 4 : bytesLeft;
                 unsigned char* data = (unsigned char*) malloc(dataSize);
                 memcpy(data, content, dataSize);
                 int packetSize;
                 unsigned char* packet = getDataPacket(sequence, data, dataSize, &packetSize);
                 
-               /* if(llwrite(fd, packet, packetSize) == -1) {
+                if(llwrite(fd, packet, packetSize) == -1) {
                     printf("Exit: error in data packets\n");
                     exit(-1);
-                }*/
+                }
 
                   for (int i=0;i<packetSize;i++){
                     printf("%i--",packet[i]);
                 }
                 printf("\n");
                 
-                bytesLeft -= (long int) MAX_PAYLOAD_SIZE; 
+                bytesLeft -= (long int) MAX_PAYLOAD_SIZE - 4; 
                 content += dataSize; 
                 sequence = (sequence + 1) % 255;   
             }
@@ -93,16 +93,41 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 for (int i=0;i<packetSize;i++){
                     printf("%i\n",packet[i]);
                 }
-                file = fopen(filename,"wb+");
-                while ((packetSize = llread(fd, packet)) < 0);
-                printf("size2: %i \n",packetSize);
-                for (int i=0;i<packetSize;i++){
-                    printf("%i\n",packet[i]);
-                }
+
+
+
                 file = fopen(filename,"wb+");
 
+
+                while (1) {    
+                    while ((packetSize = llread(fd, packet)) < 0){
+                        printf("a");
+                    }
+                    if(packetSize == 0) break;
+                    else if(packet[0] != 3){
+                        printf("b");
+                        unsigned char *buffer = (unsigned char*)malloc(packetSize);
+                        parseDataPacket(packet, packetSize, buffer);
+                        fwrite(buffer, sizeof(unsigned char), packetSize-4, file);
+                        free(buffer);
+                    }
+                else{
+                    printf("v");
+                    /*for (int i=0;i<packetSize;i++){
+                        printf("%i\n",packet[i]);
+                    }*/
+                    printf("k");
+                    break;
+                }
+             }
+
+                fclose(file);
+                break;
+           
 
         }
+    default:
+        break;
         
     }
     unsigned char i = 12;
@@ -160,4 +185,9 @@ unsigned char * getData(FILE* fd, long int fileLength) {
     unsigned char* content = (unsigned char*)malloc(sizeof(unsigned char) * fileLength);
     fread(content, sizeof(unsigned char), fileLength, fd);
     return content;
+}
+
+void parseDataPacket(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer) {
+    memcpy(buffer,packet+4,packetSize-4);
+    buffer += packetSize+4;
 }
