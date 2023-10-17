@@ -4,24 +4,85 @@
 #include "link_layer.h"
 #include <math.h>
 
+LinkLayer connectionParameters;
+
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
-    LinkLayer linkLayer;
-    strcpy(linkLayer.serialPort,serialPort);
-    linkLayer.role = strcmp(role, "tx") ? LlRx : LlTx;
-    linkLayer.baudRate = baudRate;
-    linkLayer.nRetransmissions = nTries;
-    linkLayer.timeout = timeout;
+
+    strcpy(connectionParameters.serialPort,serialPort);
+    if (strcmp(role,"tx")){
+           connectionParameters.role = LlRx;
+    }
+    else{
+        connectionParameters.role = LlTx;
+    }
+    connectionParameters.baudRate = baudRate;
+    connectionParameters.nRetransmissions = nTries;
+    connectionParameters.timeout = timeout;
 
     unsigned char *packet_received = (unsigned char *)malloc(16);
     
     FILE *file;
 
-    int fd = llopen(linkLayer);
+    int fd = llopen(connectionParameters);
 
-    switch(linkLayer.role){
+    switch(connectionParameters.role){
+
+        case LlRx:{
+
+                file = fopen(filename,"wb+");
+                unsigned char *packet = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
+                int packetSize = -1;
+
+                while(1){
+
+                    packetSize = llread(fd, packet);
+                    if (packetSize>=0){
+                        break;
+                   } 
+                } 
+                /*printf("size: %i \n",packetSize);
+                for (int i=0;i<packetSize;i++){
+                    printf("%i\n",packet[i]);
+                }*/
+
+                while (1) {    
+
+                    while (1){
+                        packetSize = llread(fd, packet);
+                        if (packetSize>=0) break;
+                    }
+                        
+    
+                    if(packetSize == 0) break;
+
+                    else if(packet[0] != 3){
+                        unsigned char *buffer = (unsigned char*)malloc(packetSize);
+                        parseDataPacket(packet, packetSize, buffer);
+                        fwrite(buffer, sizeof(unsigned char), packetSize-4, file);
+                        free(buffer);
+                    }
+
+                    else break;
+                
+                }
+                 while(1){
+
+                    packetSize = llread(fd, packet);
+                    if (packetSize>=0){
+                        break;
+                   } 
+                } 
+
+
+                fclose(file);
+                break;
+           
+
+        }
         case LlTx: {
+
             file = fopen(filename, "rb");
             if (file == NULL) {
                 perror("Error\n");
@@ -31,9 +92,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             int prev = ftell(file);
             fseek(file,0L,SEEK_END);
             long int fileSize = ftell(file)-prev;
-  
             fseek(file,prev,SEEK_SET);
-            printf("%i",fileSize);
+    
 
             unsigned int startPacketSize;
             unsigned char *startPacket = getControlPacket(2, filename, fileSize, &startPacketSize);
@@ -42,12 +102,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 printf("Exit: error in start packet\n");
                 exit(-1);
             }
+
             int bytesLeft = fileSize;
             unsigned char sequence = 0;
             unsigned char* content = getData(file, fileSize);
 
         
-               while (bytesLeft >= 0) { 
+            while (bytesLeft >= 0) { 
 
                 printf("a:");
                 printf("%i \n",bytesLeft);
@@ -81,66 +142,24 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 printf("Exit: error in start packet\n");
                 exit(-1);
             }
+
+            llclose(fd);
+
             break;
+
+           
             
         }
-        case LlRx:{
-
-                unsigned char *packet = (unsigned char *)malloc(16);
-                int packetSize = -1;
-                while ((packetSize = llread(fd, packet)) < 0);
-                printf("size: %i \n",packetSize);
-                for (int i=0;i<packetSize;i++){
-                    printf("%i\n",packet[i]);
-                }
-
-
-
-                file = fopen(filename,"wb+");
-
-
-                while (1) {    
-                    while ((packetSize = llread(fd, packet)) < 0){
-                        printf("a");
-                    }
-                    if(packetSize == 0) break;
-                    else if(packet[0] != 3){
-                        printf("b");
-                        unsigned char *buffer = (unsigned char*)malloc(packetSize);
-                        parseDataPacket(packet, packetSize, buffer);
-                        fwrite(buffer, sizeof(unsigned char), packetSize-4, file);
-                        free(buffer);
-                    }
-                else{
-                    printf("v");
-                    /*for (int i=0;i<packetSize;i++){
-                        printf("%i\n",packet[i]);
-                    }*/
-                    printf("k");
-                    break;
-                }
-             }
-
-                fclose(file);
-                break;
-           
-
-        }
+        
     default:
         break;
         
     }
-    unsigned char i = 12;
+    
 
-    /*if (linkLayer.role == LlTx){
-        llwrite(fd,&i,1);
-    }  */
 
-    /*if (linkLayer.role == LlRx){
-        llread(fd, packet_received);
-    } */
     fclose(file);
-    //llclose(fd);
+    
 
 }
 
@@ -148,7 +167,7 @@ unsigned char * getControlPacket(const unsigned int c, const char* filename, lon
 
     const int L1 = (int) ceil(log2f((float)length)/8.0);
     const int L2 = strlen(filename);
-    *size = 1+2+L1+2+L2;
+    *size = 1+2+L1+L2;
     unsigned char *packet = (unsigned char*)malloc(*size);
     
     unsigned int pos = 0;
@@ -191,3 +210,4 @@ void parseDataPacket(const unsigned char* packet, const unsigned int packetSize,
     memcpy(buffer,packet+4,packetSize-4);
     buffer += packetSize+4;
 }
+

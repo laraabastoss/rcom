@@ -185,6 +185,7 @@ int llread(int fd, unsigned char *packet)
                     else if (byte == C_DISC){
                         unsigned char DISC[5] = {FLAG, A_RE, C_DISC, A_RE ^ C_DISC, FLAG};
                         write(fd, DISC, 5);
+                        printf("DISC\n");
                         return 0;
 
                     }
@@ -247,6 +248,7 @@ int llread(int fd, unsigned char *packet)
 
             }
         }
+
     }
 
     return -1;
@@ -258,7 +260,7 @@ int llread(int fd, unsigned char *packet)
 int llclose(int showStatistics)
 {
 
-    LinkLayerStateMachine current_state;
+    LinkLayerStateMachine current_state=START;
     unsigned char byte;
     alarmEnabled = TRUE;
     alarmCount = 0;
@@ -274,19 +276,20 @@ int llclose(int showStatistics)
         while (alarmEnabled == TRUE && current_state!=STOP_R){
 
             if (read(showStatistics, &byte,1) > 0){
-                 
+                 printf("byte: %i",byte);
                     switch (current_state) {
 
                         case START:
 
                             if (byte == FLAG){
+
                                 current_state = FLAG_RCV;
                             }
 
                             break;
                         case FLAG_RCV:
 
-                            if (byte == A_ER){
+                            if (byte == A_RE){
                                 current_state = A_RCV;
                             }
 
@@ -310,7 +313,7 @@ int llclose(int showStatistics)
 
                         case C_RCV:
 
-                            if (byte == (A_ER ^ C_DISC)){
+                            if (byte == (A_RE ^ C_DISC)){
                                 current_state = BCC_OK;
                             }
 
