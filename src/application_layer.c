@@ -33,22 +33,17 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
                 file = fopen(filename,"wb+");
                 unsigned char *packet = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
-                int packetSize = -1;
 
                 while(1){
 
-                    packetSize = llread(fd, packet);
+                    int packetSize = llread(fd, packet);
                     if (packetSize>=0){
                         break;
                    } 
                 } 
-                /*printf("size: %i \n",packetSize);
-                for (int i=0;i<packetSize;i++){
-                    printf("%i\n",packet[i]);
-                }*/
 
                 while (1) {    
-
+                    int packetSize;
                     while (1){
                         packetSize = llread(fd, packet);
                         if (packetSize>=0) break;
@@ -67,9 +62,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     else break;
                 
                 }
+
                  while(1){
 
-                    packetSize = llread(fd, packet);
+                    int packetSize = llread(fd, packet);
                     if (packetSize>=0){
                         break;
                    } 
@@ -89,10 +85,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 exit(-1);
             }
 
-            int prev = ftell(file);
-            fseek(file,0L,SEEK_END);
-            long int fileSize = ftell(file)-prev;
-            fseek(file,prev,SEEK_SET);
+            fseek(file, 0, SEEK_END); 
+            int fileSize = ftell(file); 
+            fseek(file, 0, SEEK_SET);
     
 
             unsigned int startPacketSize;
@@ -112,25 +107,36 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
                 printf("a:");
                 printf("%i \n",bytesLeft);
-
-                int dataSize = bytesLeft > (long int) MAX_PAYLOAD_SIZE - 4 ? MAX_PAYLOAD_SIZE - 4 : bytesLeft;
-                unsigned char* data = (unsigned char*) malloc(dataSize);
-                memcpy(data, content, dataSize);
-                int packetSize;
-                unsigned char* packet = getDataPacket(sequence, data, dataSize, &packetSize);
+                int byteSent;
+                if (MAX_PAYLOAD_SIZE - 4 < bytesLeft){
+                    byteSent = MAX_PAYLOAD_SIZE - 4;
+                }
                 
-                if(llwrite(fd, packet, packetSize) == -1) {
+                else{
+                    byteSent = bytesLeft;
+                } 
+
+                unsigned char* dataPacket = (unsigned char*)malloc(byteSent + 4);
+
+                dataPacket[0] = 1;   
+                dataPacket[1] = sequence;
+                dataPacket[2] = byteSent >> 8 & 0xFF;
+                dataPacket[3] = byteSent & 0xFF;
+                memcpy(dataPacket+4, content, byteSent);
+
+                
+                if(llwrite(fd, dataPacket, byteSent + 4) == -1) {
                     printf("Exit: error in data packets\n");
                     exit(-1);
                 }
 
-                  for (int i=0;i<packetSize;i++){
-                    printf("%i--",packet[i]);
+                  for (int i=0;i<byteSent + 4;i++){
+                    printf("%i--",dataPacket[i]);
                 }
                 printf("\n");
                 
                 bytesLeft -= (long int) MAX_PAYLOAD_SIZE - 4; 
-                content += dataSize; 
+                content += byteSent; 
                 sequence = (sequence + 1) % 255;   
             }
 
@@ -164,16 +170,15 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 }
 
 unsigned char * getControlPacket(const unsigned int c, const char* filename, long int length, unsigned int* size){
-
-    const int L1 = (int) ceil(log2f((float)length)/8.0);
-    const int L2 = strlen(filename);
-    *size = 1+2+L1+L2;
-    unsigned char *packet = (unsigned char*)malloc(*size);
+    unsigned L1 = sizeof(size);
+    unsigned L2 = strlen(filename);
+    *size = 3+L1+L2;
+    unsigned char *packet = (unsigned char*)malloc(3+L1+L2);
     
     unsigned int pos = 0;
-    packet[pos++]=c;
-    packet[pos++]=0;
-    packet[pos++]=L1;
+    packet[0]=c;
+    packet[1]=0;
+    packet[2]=L1;
 
     for (unsigned char i = 0 ; i < L1 ; i++) {
         packet[2+L1-i] = length & 0xFF;
@@ -186,19 +191,6 @@ unsigned char * getControlPacket(const unsigned int c, const char* filename, lon
     return packet;
 }
 
-unsigned char * getDataPacket(unsigned char sequence, unsigned char *data, int dataSize, int *packetSize){
-
-    *packetSize = 1 + 1 + 2 + dataSize;
-    unsigned char* packet = (unsigned char*)malloc(*packetSize);
-
-    packet[0] = 1;   
-    packet[1] = sequence;
-    packet[2] = dataSize >> 8 & 0xFF;
-    packet[3] = dataSize & 0xFF;
-    memcpy(packet+4, data, dataSize);
-
-    return packet;
-}
 
 unsigned char * getData(FILE* fd, long int fileLength) {
     unsigned char* content = (unsigned char*)malloc(sizeof(unsigned char) * fileLength);

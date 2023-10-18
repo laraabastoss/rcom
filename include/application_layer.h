@@ -19,7 +19,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
 unsigned char * getControlPacket(const unsigned int c, const char* filename, long int length, unsigned int* size);
 
-unsigned char * getDataPacket(unsigned char sequence, unsigned char *data, int dataSize, int *packetSize);
 
 unsigned char * getData(FILE* fd, long int fileLength);
 
