@@ -72,6 +72,8 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
     for (unsigned int i = 1 ; i < bufSize ; i++){
         BCC2 ^= buf[i];
     }
+
+ 
     int current_size = bufSize + 6;
     int current_index = 4;
 
@@ -86,16 +88,23 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
             information_frame[current_index++] = buf[i];
         }
         
-    }
+ 
 
-    information_frame[current_index++] = BCC2;
+    }
+   if (  BCC2==FLAG || BCC2==ESC ){
+        information_frame = realloc(information_frame,++current_size);
+        information_frame[current_index++] = ESC;
+        information_frame[current_index++] = (BCC2 ^ 0x20);
+        }
+    else information_frame[current_index++] = BCC2;
+
     information_frame[current_index++] = FLAG;
     alarmCount = 0;
     int accepted = 0;
     int rejected = 0;
     unsigned char byte = '\0';
     LinkLayerStateMachine current_state = START;
-    //(void) signal(SIGALRM, alarmHandler);
+
 
     while(alarmCount < retransmitions){
         printf("1");
@@ -160,7 +169,7 @@ int llread(int fd, unsigned char *packet)
     
     while (current_state != STOP_R){
         if (read(fd, &byte, 1) > 0){
-            printf("byte: %u\n",byte);
+            //printf("byte: %u\n",byte);
             switch (current_state) {
                 case START:
                     
@@ -241,7 +250,7 @@ int llread(int fd, unsigned char *packet)
                     break;
                 case FOUND_STUFFING:
                     current_state = READING;
-                    if (byte == (ESC^0x20) || byte == (FLAG^0x20)) packet[current_index++] = (byte^0x20);
+                    packet[current_index++] = (byte^0x20);
                     break;
                 default:
                     break;
@@ -276,7 +285,7 @@ int llclose(int showStatistics)
         while (alarmEnabled == TRUE && current_state!=STOP_R){
 
             if (read(showStatistics, &byte,1) > 0){
-                 printf("byte: %i",byte);
+                // printf("byte: %i",byte);
                     switch (current_state) {
 
                         case START:
@@ -527,7 +536,7 @@ int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachin
         
         if (read(fd, &byte, 1) > 0 ) {
 
-            printf("aaa");
+           // printf("aaa");
             switch (current_state){
             case (START):{
 
@@ -615,7 +624,7 @@ int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachin
         }
 
     }
-    printf("final answer: %d\n", answer);
+    //printf("final answer: %d\n", answer);
     return answer;
      
 }
