@@ -12,23 +12,38 @@ int retransmitions = 0;
 unsigned char tramaTx = 0;
 unsigned char tramaRx = 0;
 struct termios oldtio;
+struct timespec initial_time, final_time;
+int dataErrors = 0;
+#define BAUDRATE 38400
+int accept = 0;
+int BCC_error=0;
+
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
-int llopen(LinkLayer connectionParameters)
+int llopen(LinkLayer connectionParameters, IntroduceError error)
 {
+
     (void) signal(SIGALRM, alarmHandler);
+ 
     // check connection
     int fd = set_serial_port(connectionParameters);
     if (fd < 0) return -1;
 
     LinkLayerStateMachine state = START;
 
+    switch(error){
+        case (FER):
+            BCC_error = 1;
+            break;
+        default:
+            break;
+    }
     switch (connectionParameters.role) {
 
         case LlTx: {
    
-
+            startClock();
             state = transmiter_state_machine(fd,state);
             if (state != STOP_R){
                 llclose(fd);
@@ -71,6 +86,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
     information_frame[3] = (information_frame[1] ^ information_frame[2]);
     memcpy(information_frame+4,buf, bufSize);
     unsigned char BCC2 = buf[0];
+
     for (unsigned int i = 1 ; i < bufSize ; i++){
         BCC2 ^= buf[i];
     }
@@ -98,6 +114,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
         information_frame[current_index++] = ESC;
         information_frame[current_index++] = (BCC2 ^ 0x20);
         }
+
     else information_frame[current_index++] = BCC2;
 
     information_frame[current_index++] = FLAG;
@@ -110,11 +127,11 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
 
     while(alarmCount < retransmitions){
         alarmEnabled = TRUE;
-        alarm(0);
         alarm(timeout);
         accepted = 0; 
-        rejected = 0;
-        
+        rejected =  0;
+
+       
         while (alarmEnabled == TRUE && accepted == 0 && rejected ==0 ){
             
             int written_bytes = write(fd, information_frame, current_index);
@@ -128,6 +145,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
 
                 
                 if (answer == C_RR(0) || answer == C_RR(1)){
+             
                     accepted = 1;
                     tramaTx += 1;
                     tramaTx %= 2;
@@ -136,8 +154,9 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
                 }
 
                 else if (answer == C_REJ(0) || answer == C_REJ(1)){
+                    printf("erro\n");
                     rejected = 1;
-                    alarm(0);
+                    dataErrors++;
                 }
 
          }
@@ -234,11 +253,20 @@ int llread(int fd, unsigned char *packet)
                         }
 
                         if (bcc2 == bcc2_test){
+                            if (accept == 0 && BCC_error==1){
+                                printf("a\n");
+                                unsigned char REJECTED[5] = {FLAG, A_RE, C_REJ(tramaRx), A_RE ^ C_REJ(tramaRx), FLAG};
+                                write(fd, REJECTED, 5);
+                                accept = 1;
+                                return -1;
+                        
+                            }
+                            printf("b\n");
                             current_state = STOP_R;
                             unsigned char ACCEPTED[5] = {FLAG, A_RE, C_RR(tramaRx), A_RE ^ C_RR(tramaRx), FLAG};
                             write(fd, ACCEPTED, 5);
                             tramaRx = (tramaRx + 1)%2;
-
+                            accept = 0;
                             return current_index;
                             
                         }
@@ -356,6 +384,9 @@ int llclose(int showStatistics)
             }
         }
     }
+    double elapsedTime = endClock();
+    printf("Elpased Time: %d nanoseconds\n",elapsedTime);
+    printf("Number of rejected frames: %i\n",dataErrors);
 
     if (current_state != STOP_R){
         
@@ -651,6 +682,7 @@ int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachin
 
 int set_serial_port(LinkLayer connectionParameters){
 
+    
     int fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
     if (fd < 0){
 
@@ -686,3 +718,15 @@ int set_serial_port(LinkLayer connectionParameters){
     }
     return fd;
 }
+
+void startClock(){
+    clock_gettime(CLOCK_REALTIME, &initial_time);
+}
+
+double endClock(){
+  clock_gettime(CLOCK_REALTIME, &final_time);
+  double time_val = (final_time.tv_sec-initial_time.tv_sec)+
+					(final_time.tv_sec- initial_time.tv_nsec)/1e9;
+  return time_val;
+}
+

@@ -6,8 +6,9 @@
 
 LinkLayer connectionParameters;
 
+
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
-                      int nTries, int timeout, const char *filename)
+                      int nTries, int timeout, const char *filename, IntroduceError error)
 {
 
     strcpy(connectionParameters.serialPort,serialPort);
@@ -24,7 +25,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     
     FILE *file;
 
-    int fd = llopen(connectionParameters);
+    int fd = llopen(connectionParameters,error);
 
     switch(connectionParameters.role){
 
@@ -103,8 +104,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         
             while (bytesLeft >= 0) { 
 
-                printf("a:");
-                printf("%i \n",bytesLeft);
+      
                 int byteSent;
                 if (MAX_PAYLOAD_SIZE - 4 < bytesLeft){
                     byteSent = MAX_PAYLOAD_SIZE - 4;
@@ -128,11 +128,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     exit(-1);
                 }
 
-                  for (int i=0;i<byteSent + 4;i++){
-                    printf("%i--",dataPacket[i]);
-                }
-                printf("\n");
-                
+              
                 bytesLeft -= (long int) MAX_PAYLOAD_SIZE - 4; 
                 content += byteSent; 
                 sequence = (sequence + 1) % 255;   

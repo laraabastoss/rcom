@@ -5,6 +5,8 @@
 #define _APPLICATION_LAYER_H_
 
 #include <stdio.h>
+#include <link_layer.h>
+
 
 // Application layer main function.
 // Arguments:
@@ -15,7 +17,7 @@
 //   timeout: Frame timeout.
 //   filename: Name of the file to send / receive.
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
-                      int nTries, int timeout, const char *filename);
+                      int nTries, int timeout, const char *filename, IntroduceError error);
 
 unsigned char * getControlPacket(const unsigned int c, const char* filename, long int length, unsigned int* size);
 

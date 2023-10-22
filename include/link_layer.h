@@ -14,6 +14,15 @@
 #include <unistd.h>
 #include <signal.h>
 #include <time.h>
+
+typedef enum
+{
+    None,
+    FER,
+    T_prop,
+    FrameSize
+} IntroduceError;
+
 typedef enum
 {
     LlTx,
@@ -51,7 +60,7 @@ typedef enum
 #define TRUE 1
 
 #define BUF_SIZE 5
-#define BAUDRATE 38400
+
 
 //Frame constants
 #define FLAG 0x7E
@@ -74,7 +83,7 @@ typedef enum
 
 // Open a connection using the "port" parameters defined in struct linkLayer.
 // Return "1" on success or "-1" on error.
-int llopen(LinkLayer connectionParameters);
+int llopen(LinkLayer connectionParameters, IntroduceError error);
 
 // Send data in buf with size bufSize.
 // Return number of chars written, or "-1" on error.
@@ -102,6 +111,10 @@ int control_frame_state_machine(int fd, unsigned char byte,LinkLayerStateMachine
 void alarmHandler();
 
 int set_serial_port(LinkLayer connectionParameters);
+
+void startClock();
+
+double endClock();
 
 
 #endif // _LINK_LAYER_H_
