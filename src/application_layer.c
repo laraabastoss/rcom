@@ -21,7 +21,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     connectionParameters.nRetransmissions = nTries;
     connectionParameters.timeout = timeout;
 
-    unsigned char *packet_received = (unsigned char *)malloc(16);
     
     FILE *file;
 
@@ -72,7 +71,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 } 
 
 
-                fclose(file);
                 break;
            
 
