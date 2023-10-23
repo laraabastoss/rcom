@@ -90,7 +90,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     
 
             unsigned int startPacketSize;
-            unsigned char *startPacket = getControlPacket(2, filename, fileSize, &startPacketSize);
+            unsigned char *startPacket = parseControl(2, filename, fileSize, &startPacketSize);
 
             if(llwrite(fd, startPacket, startPacketSize) == -1){ 
                 printf("Exit: error in start packet\n");
@@ -106,13 +106,26 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
       
                 int byteSent;
-                if (MAX_PAYLOAD_SIZE - 4 < bytesLeft){
-                    byteSent = MAX_PAYLOAD_SIZE - 4;
+                int sizeofIframe;
+                switch (error)
+                {
+                case FrameSize:
+                    sizeofIframe = 100;
+                    break;
+                
+                default:
+                    sizeofIframe = MAX_PAYLOAD_SIZE;
+                    break;
+                }
+
+                if (sizeofIframe - 4 < bytesLeft){
+                    byteSent = sizeofIframe - 4;
                 }
                 
                 else{
                     byteSent = bytesLeft;
-                } 
+                }
+                 
 
                 unsigned char* dataPacket = (unsigned char*)malloc(byteSent + 4);
 
@@ -129,14 +142,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 }
 
               
-                bytesLeft -= (long int) MAX_PAYLOAD_SIZE - 4; 
+                bytesLeft -= (long int) sizeofIframe - 4; 
                 content += byteSent; 
                 sequence = (sequence + 1) % 255;   
             }
 
           
 
-            unsigned char *endPacket = getControlPacket(3, filename, fileSize, &startPacketSize);
+            unsigned char *endPacket = parseControl(3, filename, fileSize, &startPacketSize);
 
             if(llwrite(fd, endPacket, startPacketSize) == -1){ 
                 printf("Exit: error in start packet\n");
@@ -163,7 +176,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
 }
 
-unsigned char * getControlPacket(const unsigned int c, const char* filename, long int length, unsigned int* size){
+unsigned char * parseControl(const unsigned int c, const char* filename, long int length, unsigned int* size){
     unsigned L1 = sizeof(size);
     unsigned L2 = strlen(filename);
     *size = 3+L1+L2;

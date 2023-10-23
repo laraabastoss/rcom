@@ -19,7 +19,7 @@
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename, IntroduceError error);
 
-unsigned char * getControlPacket(const unsigned int c, const char* filename, long int length, unsigned int* size);
+unsigned char * parseControl(const unsigned int c, const char* filename, long int length, unsigned int* size);
 
 
 unsigned char * getData(FILE* fd, long int fileLength);

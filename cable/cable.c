@@ -66,16 +66,16 @@ int main(int argc, char *argv[])
 {
     printf("\n");
 
-    system("socat -dd PTY,link=/Users/ttyS10,mode=777 PTY,link=/Users/emulatorTx,mode=777 &");
+    system("socat -dd PTY,link=/dev/ttyS10,mode=777 PTY,link=/Users/emulatorTx,mode=777 &");
     sleep(1);
     printf("\n");
 
-    system("socat -dd PTY,link=/Users/ttyS11,mode=777 PTY,link=/Users/emulatorRx,mode=777 &");
+    system("socat -dd PTY,link=/dev/ttyS11,mode=777 PTY,link=/Users/emulatorRx,mode=777 &");
     sleep(1);
 
     printf("\n\n"
-           "Transmitter must open /Users/ttyS10\n"
-           "Receiver must open /Users/ttyS11\n"
+           "Transmitter must open /dev/ttyS10\n"
+           "Receiver must open /dev/ttyS11\n"
            "\n"
            "The cable program is sensible to the following interactive commands:\n"
            "--- on           : connect the cable and data is exchanged (default state)\n"

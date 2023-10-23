@@ -43,7 +43,7 @@ int main(int argc, char *argv[])
            N_TRIES,
            TIMEOUT,
            filename);
-    IntroduceError error = None;
+    IntroduceError error = FER;
     applicationLayer(serialPort, role, BAUDRATE, N_TRIES, TIMEOUT, filename, error);
     return 0;
 }

@@ -17,6 +17,8 @@ int dataErrors = 0;
 #define BAUDRATE 38400
 int accept = 0;
 int BCC_error=0;
+int totalBits = 0;
+int sendedBits = 0;
 
 ////////////////////////////////////////////////
 // LLOPEN
@@ -135,6 +137,9 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
         while (alarmEnabled == TRUE && accepted == 0 && rejected ==0 ){
             
             int written_bytes = write(fd, information_frame, current_index);
+            printf("inside while\n");
+            sendedBits += bufSize * 8;
+
             
 
             if (written_bytes < 0){
@@ -151,6 +156,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
                     tramaTx %= 2;
                     alarmCount = retransmitions;
                     alarm(0);
+                    totalBits += bufSize * 8;
                 }
 
                 else if (answer == C_REJ(0) || answer == C_REJ(1)){
@@ -385,8 +391,13 @@ int llclose(int showStatistics)
         }
     }
     double elapsedTime = endClock();
-    printf("Elpased Time: %d nanoseconds\n",elapsedTime);
+    printf("Elpased Time: %f seconds\n",elapsedTime);
     printf("Number of rejected frames: %i\n",dataErrors);
+    double linkCapacity = sendedBits/elapsedTime;
+    double receivedBitrait = totalBits/elapsedTime;
+    printf("Bits received per second: %f\n", receivedBitrait);
+    printf("Bits sended per second %f\n", linkCapacity);
+    printf("Transference time: %f\n", receivedBitrait/linkCapacity);
 
     if (current_state != STOP_R){
         
@@ -726,7 +737,7 @@ void startClock(){
 double endClock(){
   clock_gettime(CLOCK_REALTIME, &final_time);
   double time_val = (final_time.tv_sec-initial_time.tv_sec)+
-					(final_time.tv_sec- initial_time.tv_nsec)/1e9;
+					(final_time.tv_nsec- initial_time.tv_nsec)/1e9;
   return time_val;
 }
 
