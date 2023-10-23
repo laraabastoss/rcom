@@ -54,7 +54,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
                     else if(packet[0] != 3){
                         unsigned char *buffer = (unsigned char*)malloc(packetSize);
-                        parseDataPacket(packet, packetSize, buffer);
+                        removeHeaderData(packet, packetSize, buffer);
                         fwrite(buffer, sizeof(unsigned char), packetSize-4, file);
                         free(buffer);
                     }
@@ -97,14 +97,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 exit(-1);
             }
 
-            int bytesLeft = fileSize;
-            unsigned char sequence = 0;
-            unsigned char* content = getData(file, fileSize);
+            int bytesToSend = fileSize;
+            unsigned char frameNumber = 0;
+            unsigned char* data = openFile(file, fileSize);
 
         
-            while (bytesLeft >= 0) { 
-
-      
+            while (bytesToSend >= 0) { 
                 int byteSent;
                 int sizeofIframe;
                 switch (error)
@@ -118,33 +116,30 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     break;
                 }
 
-                if (sizeofIframe - 4 < bytesLeft){
+                if (sizeofIframe - 4 < bytesToSend){
                     byteSent = sizeofIframe - 4;
                 }
                 
                 else{
-                    byteSent = bytesLeft;
+                    byteSent = bytesToSend;
                 }
                  
 
                 unsigned char* dataPacket = (unsigned char*)malloc(byteSent + 4);
-
                 dataPacket[0] = 1;   
-                dataPacket[1] = sequence;
+                dataPacket[1] = frameNumber;
                 dataPacket[2] = byteSent >> 8 & 0xFF;
                 dataPacket[3] = byteSent & 0xFF;
-                memcpy(dataPacket+4, content, byteSent);
-
-                
+                memcpy(dataPacket+4, data, byteSent);
+        
                 if(llwrite(fd, dataPacket, byteSent + 4) == -1) {
                     printf("Exit: error in data packets\n");
                     exit(-1);
                 }
 
-              
-                bytesLeft -= (long int) sizeofIframe - 4; 
-                content += byteSent; 
-                sequence = (sequence + 1) % 255;   
+                bytesToSend -= (long int) sizeofIframe - 4; 
+                data += byteSent; 
+                frameNumber = (frameNumber + 1) % 255;   
             }
 
           
@@ -179,8 +174,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 unsigned char * parseControl(const unsigned int c, const char* filename, long int length, unsigned int* size){
     unsigned L1 = sizeof(size);
     unsigned L2 = strlen(filename);
-    *size = 3+L1+L2;
     unsigned char *packet = (unsigned char*)malloc(3+L1+L2);
+    *size = 3+L1+L2;
     
     unsigned int pos = 0;
     packet[0]=c;
@@ -199,14 +194,15 @@ unsigned char * parseControl(const unsigned int c, const char* filename, long in
 }
 
 
-unsigned char * getData(FILE* fd, long int fileLength) {
-    unsigned char* content = (unsigned char*)malloc(sizeof(unsigned char) * fileLength);
-    fread(content, sizeof(unsigned char), fileLength, fd);
-    return content;
+unsigned char * openFile(FILE* fd, long int fileLength) {
+    unsigned char* data = (unsigned char*)malloc(sizeof(unsigned char) * fileLength);
+    fread(data, sizeof(unsigned char), fileLength, fd);
+    return data;
 }
 
-void parseDataPacket(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer) {
+void removeHeaderData(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer) {
     memcpy(buffer,packet+4,packetSize-4);
-    buffer += packetSize+4;
+    buffer+=4;
+    buffer += packetSize;
 }
 

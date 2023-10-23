@@ -22,9 +22,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 unsigned char * parseControl(const unsigned int c, const char* filename, long int length, unsigned int* size);
 
 
-unsigned char * getData(FILE* fd, long int fileLength);
+unsigned char * openFile(FILE* fd, long int fileLength);
 
-void parseDataPacket(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer);
+void removeHeaderData(const unsigned char* packet, const unsigned int packetSize, unsigned char* buffer);
 
 
 

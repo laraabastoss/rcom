@@ -45,9 +45,9 @@ typedef enum
    A_RCV,
    C_RCV,
    BCC_OK,
-   STOP_R,
-   READING,
-   FOUND_STUFFING,
+   STOP,
+   DATA,
+   STUFFEDBYTES,
 } LinkLayerStateMachine;
 
 

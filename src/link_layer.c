@@ -2,19 +2,18 @@
 
 #include "link_layer.h"
 #include <signal.h>
+#define BAUDRATE 38400
 
 // MISC
-volatile int STOP = FALSE;
 int alarmEnabled = FALSE;
 int alarmCount = 0;
 int timeout = 0;
-int retransmitions = 0;
-unsigned char tramaTx = 0;
-unsigned char tramaRx = 0;
+int nRetransmissions = 0;
 struct termios oldtio;
 struct timespec initial_time, final_time;
 int dataErrors = 0;
-#define BAUDRATE 38400
+unsigned char frameNumberTransmiter = 0;
+unsigned char frameNumberReceiver = 0;
 int accept = 0;
 int BCC_error=0;
 int totalBits = 0;
@@ -47,7 +46,7 @@ int llopen(LinkLayer connectionParameters, IntroduceError error)
    
             startClock();
             state = transmiter_state_machine(fd,state);
-            if (state != STOP_R){
+            if (state != STOP){
                 llclose(fd);
                 return -1;
             }
@@ -84,7 +83,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
     information_frame[0] = FLAG;
     
     information_frame[1] = A_ER;
-    information_frame[2] = C_N(tramaTx);
+    information_frame[2] = C_N(frameNumberTransmiter);
     information_frame[3] = (information_frame[1] ^ information_frame[2]);
     memcpy(information_frame+4,buf, bufSize);
     unsigned char BCC2 = buf[0];
@@ -127,7 +126,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
     LinkLayerStateMachine current_state = START;
 
 
-    while(alarmCount < retransmitions){
+    while(alarmCount < nRetransmissions){
         alarmEnabled = TRUE;
         alarm(timeout);
         accepted = 0; 
@@ -137,7 +136,6 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
         while (alarmEnabled == TRUE && accepted == 0 && rejected ==0 ){
             
             int written_bytes = write(fd, information_frame, current_index);
-            printf("inside while\n");
             sendedBits += bufSize * 8;
 
             
@@ -152,15 +150,14 @@ int llwrite(int fd, const unsigned char *buf, int bufSize)
                 if (answer == C_RR(0) || answer == C_RR(1)){
              
                     accepted = 1;
-                    tramaTx += 1;
-                    tramaTx %= 2;
-                    alarmCount = retransmitions;
+                    frameNumberTransmiter += 1;
+                    frameNumberTransmiter %= 2;
+                    alarmCount = nRetransmissions;
                     alarm(0);
                     totalBits += bufSize * 8;
                 }
 
                 else if (answer == C_REJ(0) || answer == C_REJ(1)){
-                    printf("erro\n");
                     rejected = 1;
                     dataErrors++;
                 }
@@ -191,7 +188,7 @@ int llread(int fd, unsigned char *packet)
     LinkLayerStateMachine current_state = START;
     int current_index = 0;
     
-    while (current_state != STOP_R){
+    while (current_state != STOP){
         if (read(fd, &byte, 1) > 0){
             switch (current_state) {
                 case START:
@@ -207,14 +204,14 @@ int llread(int fd, unsigned char *packet)
 
                 case A_RCV:
 
-                    if (byte == C_N(tramaRx)){
+                    if (byte == C_N(frameNumberReceiver)){
 
                         current_state = C_RCV;
                         control_field = byte;
 
                     }
-                    else if (byte == C_N((tramaRx+1)%2)){
-                        unsigned char ACCEPTED[5] = {FLAG, A_RE, C_RR((tramaRx+1)%2), A_RE ^ C_RR((tramaRx+1)%2), FLAG};
+                    else if (byte == C_N((frameNumberReceiver+1)%2)){
+                        unsigned char ACCEPTED[5] = {FLAG, A_RE, C_RR((frameNumberReceiver+1)%2), A_RE ^ C_RR((frameNumberReceiver+1)%2), FLAG};
                         write(fd, ACCEPTED, 5);
                         return 0;
                     }
@@ -236,14 +233,14 @@ int llread(int fd, unsigned char *packet)
                 case C_RCV:
                     
                     if (byte == (A_ER ^ control_field)){
-                        current_state = READING;
+                        current_state = DATA;
                     }
                     else if (byte == FLAG) current_state = FLAG_RCV;
                     else current_state = START;
                     break;
                 
-                case READING:
-                    if (byte == ESC) current_state = FOUND_STUFFING;
+                case DATA:
+                    if (byte == ESC) current_state = STUFFEDBYTES;
                     else if (byte == FLAG){
 
                         
@@ -260,18 +257,18 @@ int llread(int fd, unsigned char *packet)
 
                         if (bcc2 == bcc2_test){
                             if (accept == 0 && BCC_error==1){
-                                printf("a\n");
-                                unsigned char REJECTED[5] = {FLAG, A_RE, C_REJ(tramaRx), A_RE ^ C_REJ(tramaRx), FLAG};
+     
+                                unsigned char REJECTED[5] = {FLAG, A_RE, C_REJ(frameNumberReceiver), A_RE ^ C_REJ(frameNumberReceiver), FLAG};
                                 write(fd, REJECTED, 5);
                                 accept = 1;
                                 return -1;
                         
                             }
-                            printf("b\n");
-                            current_state = STOP_R;
-                            unsigned char ACCEPTED[5] = {FLAG, A_RE, C_RR(tramaRx), A_RE ^ C_RR(tramaRx), FLAG};
+    
+                            current_state = STOP;
+                            unsigned char ACCEPTED[5] = {FLAG, A_RE, C_RR(frameNumberReceiver), A_RE ^ C_RR(frameNumberReceiver), FLAG};
                             write(fd, ACCEPTED, 5);
-                            tramaRx = (tramaRx + 1)%2;
+                            frameNumberReceiver = (frameNumberReceiver + 1)%2;
                             accept = 0;
                             return current_index;
                             
@@ -279,7 +276,7 @@ int llread(int fd, unsigned char *packet)
 
                         else{
 
-                            unsigned char REJECTED[5] = {FLAG, A_RE, C_REJ(tramaRx), A_RE ^ C_REJ(tramaRx), FLAG};
+                            unsigned char REJECTED[5] = {FLAG, A_RE, C_REJ(frameNumberReceiver), A_RE ^ C_REJ(frameNumberReceiver), FLAG};
                             write(fd, REJECTED, 5);
                             return -1;
 
@@ -289,8 +286,8 @@ int llread(int fd, unsigned char *packet)
                         packet[current_index++] = byte;
                     }
                     break;
-                case FOUND_STUFFING:
-                    current_state = READING;
+                case STUFFEDBYTES:
+                    current_state = DATA;
                     packet[current_index++] = (byte^0x20);
                     break;
                 default:
@@ -315,15 +312,13 @@ int llclose(int showStatistics)
     alarmEnabled = TRUE;
     alarmCount = 0;
 
-    while (alarmCount < retransmitions && current_state!=STOP_R){
+    while (alarmCount < nRetransmissions && current_state!=STOP){
 
         unsigned char DISC[5] = {FLAG, A_ER, C_DISC, A_ER ^ C_DISC, FLAG};
         write(showStatistics, DISC, 5);
-    
         alarm(timeout);
         alarmEnabled = TRUE;
-        while (alarmEnabled == TRUE && current_state!=STOP_R){
-
+        while (alarmEnabled == TRUE && current_state!=STOP){
             if (read(showStatistics, &byte,1) > 0){
                     switch (current_state) {
 
@@ -375,7 +370,7 @@ int llclose(int showStatistics)
                         case BCC_OK:
 
                             if (byte == FLAG){
-                                current_state = STOP_R;
+                                current_state = STOP;
                                 alarm(0);
                             }
 
@@ -399,7 +394,7 @@ int llclose(int showStatistics)
     printf("Bits sended per second %f\n", linkCapacity);
     printf("Transference time: %f\n", receivedBitrait/linkCapacity);
 
-    if (current_state != STOP_R){
+    if (current_state != STOP){
         
         if (tcsetattr(showStatistics, TCSANOW, &oldtio) == -1){
             perror("tcsetattr");
@@ -435,7 +430,7 @@ void receiver_state_machine(int fd, LinkLayerStateMachine current_state){
 
        unsigned char byte;
 
-       while (current_state != STOP_R) {
+       while (current_state != STOP) {
                 if (read(fd, &byte, 1) > 0) {
                  
                     
@@ -488,7 +483,7 @@ void receiver_state_machine(int fd, LinkLayerStateMachine current_state){
                         case BCC_OK:
 
                             if (byte == FLAG){
-                                current_state = STOP_R;
+                                current_state = STOP;
                                 alarm(0);
                             }
 
@@ -505,19 +500,19 @@ void receiver_state_machine(int fd, LinkLayerStateMachine current_state){
   
 }
 
+
+//trasmiter state machine to validade UA
 LinkLayerStateMachine transmiter_state_machine(int fd,LinkLayerStateMachine current_state){
 
    unsigned char byte;
-   while (alarmCount < retransmitions && current_state != STOP_R) {
-
+   while (alarmCount < nRetransmissions && current_state != STOP) {
                 unsigned char SET[5] = {FLAG, A_ER, C_SET, A_ER ^ C_SET, FLAG};
                 write(fd, SET, 5);
-                
                 alarmEnabled = TRUE;
                 alarm(0);
                 alarm(timeout);
                 
-                while (alarmEnabled == TRUE && current_state != STOP_R) {
+                while (alarmEnabled == TRUE && current_state != STOP) {
 
                     if (read(fd, &byte, 1) > 0) {
                       
@@ -573,14 +568,13 @@ LinkLayerStateMachine transmiter_state_machine(int fd,LinkLayerStateMachine curr
 
                                 if (byte == FLAG){
                                 
-                                    current_state = STOP_R;
+                                    current_state = STOP;
                                     alarm(0);
                                 }
 
                                 else current_state = START;
 
                                 break;
-
                             default: 
                                 break;
                         }
@@ -595,7 +589,7 @@ int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachin
 
     int answer = 0;
     LinkLayerStateMachine current_state = START;
-    while (current_state != STOP_R && alarmEnabled == TRUE) { 
+    while (current_state != STOP && alarmEnabled == TRUE) { 
         
         if (read(fd, &byte, 1) > 0 ) {
 
@@ -663,7 +657,7 @@ int control_frame_state_machine(int fd, unsigned char byte, LinkLayerStateMachin
             case (BCC_OK):{
 
                 if (byte == FLAG){
-                    current_state = STOP_R;
+                    current_state = STOP;
                     alarm(0);
                    
 
@@ -701,7 +695,7 @@ int set_serial_port(LinkLayer connectionParameters){
         exit(-1);
     }
     
-    retransmitions = connectionParameters.nRetransmissions;
+    nRetransmissions = connectionParameters.nRetransmissions;
     timeout = connectionParameters.timeout;
 
     struct termios newtio;
